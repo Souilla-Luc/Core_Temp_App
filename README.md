@@ -17,7 +17,7 @@
 
 ## Live Application
 
-🌐 [Core Temp App - Web Application](https://luc-souilla.shinyapps.io/Body_Temp_App/)
+🌐 [Core Temp App - Web Application](https://luc-souilla.shinyapps.io/core-temp-app/)
 
 ## Citation
 If you use Core Temp App in your research, please cite:
