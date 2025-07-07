@@ -1,6 +1,6 @@
 # Core_Temp_App
 
-![Core Temp App Logo](pill.png)
+![Core Temp App Logo](www/pill.png)
 
 ## Description
 
@@ -17,9 +17,5 @@
 ## Live Application
 
 🌐 [Core Temp App - Web Application](https://luc-souilla.shinyapps.io/Body_Temp_App/)
-
-## Source Code
-
-📂 [GitHub Repository](https://github.com/Souilla-Luc/Core_Temp_App)
 
 ---
