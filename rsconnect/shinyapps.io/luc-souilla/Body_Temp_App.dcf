@@ -5,7 +5,7 @@ account: luc-souilla
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 15040146
-bundleId: 10574701
+bundleId: 10579112
 url: https://luc-souilla.shinyapps.io/Body_Temp_App/
 version: 1
 asMultiple: FALSE
