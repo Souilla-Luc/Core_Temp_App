@@ -28,7 +28,8 @@ ui <- tagList(
   ),
 navbarPage(
   title = div(
-"Core Temp App", tags$img(src = "pill1.png", height = "30px", style = "margin-right:10px;"),
+    style = "display: flex; align-items: center;",  # centre verticalement le contenu du div
+    tags$img(src = "pill.png", height = "75px", style = "margin-right: 15px;")
     
   ),
   
@@ -143,6 +144,22 @@ tabPanel(
   )
 
 # --- FOOTNOTES ---
+),
+header = tags$head(
+  tags$style(HTML("
+      /* Centrer verticalement la navbar-brand (le container du titre) */
+      .navbar-header {
+        display: flex !important;
+        align-items: center !important;
+        height: 60px; /* adapte selon la hauteur de ta navbar */
+      }
+      
+      /* Supprimer padding/margin inutiles */
+      .navbar-brand {
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+    "))
 ),
 tags$footer(
   style = "
