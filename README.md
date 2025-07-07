@@ -1,6 +1,7 @@
-# Core_Temp_App
 
-![Core Temp App Logo](www/pill.png)
+<p align="center">
+  <img src="www/pill.png" alt="Core Temp App Logo" width="500"/>
+</p>
 
 ## Description
 
@@ -17,5 +18,10 @@
 ## Live Application
 
 🌐 [Core Temp App - Web Application](https://luc-souilla.shinyapps.io/Body_Temp_App/)
+
+## Citation
+If you use Core Temp App in your research, please cite:
+
+    Souilla, L. (2025). Core Temp App: Interactive tool for analyzing core body temperature data from Body Cap pills. Available at: https://github.com/Souilla-Luc/Core_Temp_App
 
 ---
