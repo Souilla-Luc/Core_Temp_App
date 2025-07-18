@@ -16,6 +16,8 @@ library(dplyr)
 library(tidyr)
 library(purrr)# Assure-toi que readr est bien chargé
 library(plotly)
+library(DT)
+library(lubridate)
 
 source("utils_split_pills.R")
 # Define UI for application that draws a histogram
@@ -71,6 +73,7 @@ navbarPage(
       dateInput("date", "Select date (YYYY-MM-DD)"),
       tags$br(),
       HTML("<div style='margin-top:-10px; color:red;'><b>Attention :</b> Time should be enter as HH:MM:SS </div>"),
+      style = "padding-bottom: 100px;",  # adjust based on your footer height
       fluidRow(
         column(
           3,
@@ -114,8 +117,9 @@ navbarPage(
           ),
         tags$br(),
         tags$br(),
-        mainPanel(
-          tableOutput("summary_stats")
+        
+        fluidRow(
+          column(12, DT::DTOutput("summary_stats"))  # Full width table below the four columns
         )
         
       )
@@ -193,14 +197,16 @@ tags$footer(
 # Define server logic required to draw a histogram
 server <- function(input, output, session)  {
   
-  #Stp 1 1st read csv file
-  raw_csv <- reactive({
+  #Step 1 1st read csv file
+  #using fread Similar to read.csv() and read.delim() but faster and more convenient.
+  #fread is for regular delimited files; i.e., where every row has the same number of columns
+  raw_csv <-  reactive({
     req(input$imported_file)
     df <-  fread(input$imported_file$datapath, header= T, encoding = "Latin-1", skip = 4, fill = TRUE) #Function to guess the delimiter
   })
   output$raw_preview <- renderTable({
     req(raw_csv())
-    head(raw_csv(),100)
+    print(raw_csv(), 300)
   }, striped = TRUE, hover = TRUE, bordered = TRUE)
   
   # Step 2 — Split into tidy pill data frames
@@ -230,6 +236,7 @@ server <- function(input, output, session)  {
     req(selected_pill_data())
     df <- selected_pill_data()
     
+    
     is_only_pill_line <- apply(df, 1, function(row) {
       has_pill <- any(grepl("^Pill\\s*[1-9]+$", row, ignore.case = TRUE))
       others_empty <- all(row[!grepl("^Pill\\s*[1-9]+$", row, ignore.case = TRUE)] %in% c("", NA))
@@ -237,17 +244,44 @@ server <- function(input, output, session)  {
     })
     
     df_clean <- df[!is_only_pill_line, ]
+    
+    # ✅ Auto-détection de la colonne Date (si elle existe)
+    possible_date_col <- names(df_clean)[sapply(df_clean, function(col) any(grepl("\\d{2,4}[/-]\\d{1,2}[/-]\\d{1,4}", col)))]
+    if (length(possible_date_col) > 0) {
+      date_col_name <- possible_date_col[1]
+      cat("📅 Colonne date détectée :", date_col_name, "\n")
+      
+      # Parser automatiquement les dates
+      df_clean$Date <- parse_date_time(df_clean[[date_col_name]], orders = c("ymd", "dmy", "mdy", "Ymd", "BdY", "d-B-Y", "d/m/Y"))
+      
+      # Retire les NA au cas où parsing échoue partiellement
+      df_clean <- df_clean[!is.na(df_clean$Date), ]
+      
+      # Remettre au format texte propre si besoin
+      df_clean$Date <- format(df_clean$Date, "%Y-%m-%d")
+    } else {
+      warning("❗Aucune colonne de date claire détectée.")
+    }
+    
     df_clean
     
   })
   
   output$selected_pills_preview <- renderTable({
-    tail(cleaned_pill_data(), 20) #display the last 20 rows
+    #print(cleaned_pill_data())
+    tail(cleaned_pill_data(), 20) 
+    #display the last 20 rows
   })
   
   
   # --- Page 2 : TIME TREATMENT ---
-  
+  combine_datetime <- function(time_input) {
+    req(input$date)
+    cat("✅  date ")
+        time_part <- format(as.POSIXct(time_input, format = "%H:%M:%S"), "%H:%M:%S")
+    datetime_str <- paste(as.character(input$date), time_part)
+    as.POSIXct(datetime_str, format = "%Y-%m-%d %H:%M:%S")
+  }
   # 🔽 AJOUTE CE BLOC ICI
   defined_periods <- reactive({
     req(
@@ -258,16 +292,17 @@ server <- function(input, output, session)  {
       input$start_cooldown, 
       input$end_cooldown,
       input$start_passive,
-      input$end_passive
+      input$end_passive,
+      input$date
     )
     
     list(
-      "Baseline" = c(input$start_baseline_out, input$end_baseline_out),
-      "Rest" = c(input$start_rest_chamber, input$end_rest_chamber),
-      "Pre-Exercise" = c(input$start_pre_exo, input$end_pre_exo),
-      "Exercise" = c(input$start_exo, input$end_exo),
-      "Cooldown Active" = c(input$start_cooldown, input$end_cooldown), #(3 min of cooldown)
-      "Cooldown Passive" = c(input$start_passive, input$end_passive) #(10 minutes de cooldown)
+      "Baseline" = c(combine_datetime(input$start_baseline_out), combine_datetime(input$end_baseline_out)),
+    "Rest" = c(combine_datetime(input$start_rest_chamber), combine_datetime(input$end_rest_chamber)),
+    "Pre-Exercise" = c(combine_datetime(input$start_pre_exo), combine_datetime(input$end_pre_exo)),
+    "Exercise" = c(combine_datetime(input$start_exo), combine_datetime(input$end_exo)),
+    "Cooldown Active" = c(combine_datetime(input$start_cooldown), combine_datetime(input$end_cooldown)),
+    "Cooldown Passive" = c(combine_datetime(input$start_passive), combine_datetime(input$end_passive))
     )
   })
 #Create reactive to get data from users
@@ -275,47 +310,66 @@ server <- function(input, output, session)  {
   date_selected <- reactive({
     req(input$date)
     input$date
+    cat("✅ input$date ok\n")
+    
   })
   
   
   period_stats <- reactive({
+    cat("=== period_stats reactive called ===\n")  # Debug: entrée dans la reactive
     req(cleaned_pill_data())
+    cat("✅ cleaned_pill_data ok\n")
     req(input$date)
+    cat("✅ input$date 2ok\n")
     
     df <- cleaned_pill_data()
-    df <- as.data.frame(df)
+    cat("Données initiales: nrow =", nrow(df), "\n")  # Debug: nombre de lignes initial
     
+    df <- as.data.frame(df)
+   
     if (!is.null(input$date)) {
       df$Date <- as.character(df$Date)
       selected_date <- as.character(input$date)
+      cat("Date sélectionnée:", selected_date, "\n")  # Debug: date entrée
       df <- df[df$Date == selected_date, ]
+      cat("Données après filtrage par date: nrow =", nrow(df), "\n")  # Debug: lignes après filtre
+      print(head(df))  # Debug: aperçu du dataframe filtré
     }
     
-    names(df) <- tolower(trimws(names(df)))
+
+  
+    names(df) <- tolower(trimws(names(df)))# rend les noms uniformes (minuscule, sans espaces)
     
     # Identifier dynamiquement la colonne de temps
-    time_col <- "time"
-    req(length(time_col) == 1)  # S'assurer qu’on en trouve une
-    
+    time_col <- grep("^tim", names(df), ignore.case = TRUE, value = TRUE)
+    req(length(time_col) >= 1)
+    time_col <- time_col[1]
+    cat("✅ time_col ok :", time_col, "\n")
     # Identifier la colonne de température (exemple : "Temperature" ou "Température")
-    temp_col <- "temperature"
-    req(length(temp_col) == 1)
-    
+    temp_col <- grep("^temp", names(df), ignore.case = TRUE, value = TRUE)
+    req(length(temp_col) >= 1)
+    temp_col <- temp_col[1]
+    cat("✅ temp_col ok :", temp_col, "\n")
     # Renommer temporairement pour simplifier
     # Convertir la colonne temps en POSIXct
     df <- as.data.frame(df)  # Pour éviter les contraintes de data.table
     df$Time_col <- df[[time_col]]
-    
+    #print(df$Time_col)
     df$Temperature <- as.numeric(df[[temp_col]])
+   #print(df$Temperature)
     
-    
+    # 🔽 Print defined periods for debug
+       # 👈 this line prints all defined time periods
     
     # Pour chaque période, filtrer et calculer les stats
     result <- list()
-    
+    #c'est bon ici 
     # Périodes à découper minute par minute
     minute_split_phases <- c("Exercise", "Cooldown Active")
     periods <- defined_periods()
+    periods <- defined_periods()
+    cat("=== PÉRIODES DÉFINIES ===\n")
+    print(periods)
     for (period_name in names(periods)) {
       start <- format(periods[[period_name]][1], "%H:%M:%S")
       end <- format(periods[[period_name]][2], "%H:%M:%S")
@@ -359,21 +413,31 @@ server <- function(input, output, session)  {
       }
     }
   }
+
+    cat("Contenu de result :\n")
+    print(result)
+    
     if (length(result) == 0) return(NULL)
     
-    stats_df <- as.data.frame(do.call(cbind, result))
-    rownames(stats_df) <- c("Mean", "SD", "n")
-    stats_df
+    stats_df <- do.call(rbind, lapply(names(result), function(name) {
+      data.frame(
+        Period = name,
+        Mean = round(as.numeric(result[[name]]["mean"]), 2),
+        SD = round(as.numeric(result[[name]]["sd"]), 2),
+        n = as.integer(result[[name]]["n"]),
+        stringsAsFactors = FALSE
+      )
+    }))
+    cat("Stats dataframe:\n")
+    print(stats_df)
   })
   
-  output$summary_stats <- renderTable({
+  output$summary_stats <- DT::renderDT({
     print("renderTable called")
     period_stats()
   }, rownames = TRUE)
   
   # --- Page 3 : GRAPHIQUE ---
-  
-  
    # ou simplement print(df$Time_only) pour tout voir
   output$temp_plot<-renderPlotly({
    req(cleaned_pill_data())
@@ -392,7 +456,7 @@ server <- function(input, output, session)  {
     df$Date <- as.character(df$Date)
     df$Time <- as.character(df$Time)
     
-    df <- df[!grepl("Date", df$Date), ] #supprime la premiere ligne qui se joitn au reste
+    df <- df[!grepl("Date", df$Date), ] #supprime la premiere ligne qui se joint au reste
     print(head(df$Date))
     
     df$Time_only <- as.POSIXct(paste(df$Date, df$Time), format = "%Y-%m-%d %H:%M:%S")
@@ -461,35 +525,34 @@ server <- function(input, output, session)  {
     },
     content = function(file){
       stats<-period_stats()
-      req(stats)  # S'assure que stats est non NULL
-      # Formater les valeurs numériques à 2 décimales
-      stats_rounded <- as.data.frame(lapply(stats, function(col) {
-        if (is.numeric(col)) {
-          return(round(col, 2))
-        } else {
-          return(col)
-        }
-      }))
+      req(stats)
       
-      # Ajouter manuellement la colonne "Description"
-      stats_rounded$Description <- c("Mean", "SD", "n")  # Forcé ici
-     
-      # Ajouter la colonne Date
-      req(input$date)
-      stats_rounded$Date <- as.character(input$date)
+      # Étape 1 : Mettre Mean, SD, n en variable "Description"
+      stats_long <- stats %>%
+        pivot_longer(cols = c(Mean, SD, n),
+                     names_to = "Description",
+                     values_to = "Value")
       
-      # Réorganiser les colonnes : Date à gauche
-      stats_rounded <- stats_rounded[, c("Date", "Description", setdiff(names(stats_rounded), c("Date", "Description")))]
+      # Étape 2 : Mettre Period en colonnes
+      stats_wide <- stats_long %>%
+        pivot_wider(names_from = Period,
+                    values_from = Value)
+      # Ajouter la colonne Date (tirée de input$date)
+      stats_wide$Date <- as.character(input$date)
+      # Réorganiser les colonnes : Date à gauche, Description ensuite, puis les périodes
+      stats_wide <- stats_wide[, c("Date", "Description", setdiff(names(stats_wide), c("Date", "Description")))]
+      # Arrondir les valeurs numériques à 2 décimales (sauf la Date et Description)
+      stats_wide <- stats_wide %>%
+        mutate(across(where(is.numeric), ~round(., 2)))
       
       write.table(
-        stats_rounded,
+        stats_wide,
         file,
         sep = "\t",
         row.names = FALSE,
-        quote = FALSE
-      )
+        quote = FALSE)
+      
     })
-  }
-
+}
 # Run the application 
 shinyApp(ui = ui, server = server)
