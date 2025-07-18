@@ -206,7 +206,7 @@ server <- function(input, output, session)  {
   })
   output$raw_preview <- renderTable({
     req(raw_csv())
-    print(raw_csv(), 300)
+    head(raw_csv(),300)
   }, striped = TRUE, hover = TRUE, bordered = TRUE)
   
   # Step 2 — Split into tidy pill data frames
